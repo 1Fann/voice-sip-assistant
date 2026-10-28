@@ -2,13 +2,15 @@
 
 [中文](README.md) · [Download APK](https://github.com/1Fann/voice-sip-assistant/releases/latest) · [MIT](LICENSE)
 
-Version **1.3.1**. An original Root deployment/management app for Voice SIP Agent and Shizuku; not an upstream official app or a SIP server.
+Version **1.3.2**. An original Root deployment/management app for Voice SIP Agent and Shizuku; not an upstream official app or a SIP server.
 
 It downloads official stable APKs with source/hash/certificate checks, prepares official Shizuku in Root mode, controls takeover and SIP reconnection, restores the system dialer, and provides a Root bootstrap for the tested MediaTek ROM's Shizuku UserService failure. User consent and service caller checks remain. It recognizes the separately signed [custom gateway](https://github.com/1Fann/voice-sip-gateway) and does not overwrite it with an official upgrade.
 
 ## Independent gateway recovery
 
-Opt-in root checks run independently of the helper UI at1–1440minutes (default5), with immediate check and last result. They resume after boot and first unlock. Only Shizuku, gateway binding/audio readiness and SIP registration are repaired. [Asterisk Assistant](https://github.com/1Fann/asterisk-assistant) owns server recovery; server dependency checks here are read-only. A shared lock serializes recovery. Calls/unknown state or absent Wi-Fi defer repair; manual takeover OFF is respected. Local output mute is preserved. Severe binding failures may restart Shizuku and open the gateway activity, briefly affecting other Shizuku clients. Deep sleep can delay checks.
+Opt-in root checks run independently of the helper UI at1–1440minutes (default5), with immediate check and last result. They resume after boot when app storage is available. Without a screen password, PIN, or pattern, manually dismissing the lock screen is normally unnecessary. Credential-protected devices wait for the first unlock without the former approximately 15-minute limit. Only Shizuku, gateway binding/audio readiness and SIP registration are repaired. [Asterisk Assistant](https://github.com/1Fann/asterisk-assistant) owns server recovery; server dependency checks here are read-only. A shared lock serializes recovery. Calls/unknown state or absent Wi-Fi defer repair; manual takeover OFF is respected. Local output mute is preserved. Severe binding failures may restart Shizuku and open the gateway activity, briefly affecting other Shizuku clients. Deep sleep can delay checks.
+
+Duplicate boot workers are suppressed. Failed initial Shizuku preparation still starts monitoring for later recovery. See [boot recovery and device verification](BOOT-RECOVERY.md).
 
 ## Use
 

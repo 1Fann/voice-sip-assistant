@@ -1,0 +1,11 @@
+{
+  "version": "1.3.2",
+  "name": "Voice-SIP-Assistant-1.3.2.apk",
+  "encoding": "base64",
+  "parts": [
+    "Voice-SIP-Assistant-1.3.2.apk.b64"
+  ],
+  "size": 45668,
+  "sha256": "1814c263977d2ac4260eb8aa660e73ad92a5af19f29613482998bb00bd1346c6",
+  "input": "Voice-SIP-Assistant-1.3.2.apk.b64"
+}

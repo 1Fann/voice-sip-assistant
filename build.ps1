@@ -45,9 +45,9 @@ try {
     if($LASTEXITCODE){throw 'Runtime asset packaging failed'}
     & (Join-Path $buildTools 'zipalign.exe') -f 4 (Join-Path $output 'unsigned.apk') (Join-Path $output 'aligned.apk')
     if($LASTEXITCODE){throw 'APK alignment failed'}
-    & (Join-Path $buildTools 'apksigner.bat') sign --ks $key --ks-key-alias voice-sip-assistant --ks-pass env:VSA_HELPER_SIGNING_PASSWORD --key-pass env:VSA_HELPER_SIGNING_PASSWORD --out (Join-Path $output 'Voice-SIP-Assistant-1.3.1.apk') (Join-Path $output 'aligned.apk')
+    & (Join-Path $buildTools 'apksigner.bat') sign --ks $key --ks-key-alias voice-sip-assistant --ks-pass env:VSA_HELPER_SIGNING_PASSWORD --key-pass env:VSA_HELPER_SIGNING_PASSWORD --out (Join-Path $output 'Voice-SIP-Assistant-1.3.2.apk') (Join-Path $output 'aligned.apk')
     if($LASTEXITCODE){throw 'APK signing failed'}
-    & (Join-Path $buildTools 'apksigner.bat') verify (Join-Path $output 'Voice-SIP-Assistant-1.3.1.apk')
+    & (Join-Path $buildTools 'apksigner.bat') verify (Join-Path $output 'Voice-SIP-Assistant-1.3.2.apk')
     if($LASTEXITCODE){throw 'APK verification failed'}
-    & (Join-Path $buildTools 'aapt2.exe') dump permissions (Join-Path $output 'Voice-SIP-Assistant-1.3.1.apk')
+    & (Join-Path $buildTools 'aapt2.exe') dump permissions (Join-Path $output 'Voice-SIP-Assistant-1.3.2.apk')
 }finally{Remove-Item Env:VSA_HELPER_SIGNING_PASSWORD -ErrorAction SilentlyContinue}

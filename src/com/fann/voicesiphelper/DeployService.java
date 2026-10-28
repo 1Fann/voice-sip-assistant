@@ -42,7 +42,7 @@ public class DeployService extends Service {
     verifyShizuku();Root.startShizuku(this);Root.run("am start -n "+Root.AGENT+"/io.github.sparkcyf.voicesipagent.app.MainActivity",15);Root.repairMtk(this,true);refresh();report("联发科权限服务已连接；以后可用本助手的启用按钮恢复");break;
    case "RECONNECT":Root.control("reconnect");refresh();report("重连请求已提交，请刷新查看注册状态");break;
    case "RESTORE":Root.restoreDialer();refresh();report("接管已关闭，已恢复系统电话；请实测小米互联来电");break;
-   case "BOOT_ON":prepareShizuku();Root.startShizuku(this);Root.autostart(this,true);refresh();report("已开启：开机解锁后准备 Shizuku，不自动开启接管");break;
+   case "BOOT_ON":prepareShizuku();Root.startShizuku(this);Root.autostart(this,true);refresh();report("已开启：开机应用数据可用后准备 Shizuku；无密码时通常无需手动解锁，不自动开启接管");break;
    case "BOOT_OFF":Root.autostart(this,false);refresh();report("已关闭本助手的 Shizuku 开机准备");break;
    default:throw new IOException("无效操作");
   }
