@@ -41,7 +41,7 @@ jobs:
         run: sdkmanager 'platforms;android-35' 'build-tools;36.0.0'
       - name: Build with a disposable CI signing key
         shell: pwsh
-        run: ./build.ps1 -SdkRoot $env:ANDROID_HOME -JavaHome $env:JAVA_HOME
+        run: ./build.ps1 -SdkRoot $env:ANDROID_HOME -JavaHome $env:JAVA_HOME -DevelopmentSigning
 
   release:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

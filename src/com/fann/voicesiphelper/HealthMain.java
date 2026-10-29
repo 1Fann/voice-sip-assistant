@@ -69,7 +69,7 @@ public final class HealthMain {
   }
   if(!Root.trustedAgent(context)){message="网关缺失或签名不符，未启动";return;}
   Boolean wanted=takeover();
-  if(!Boolean.TRUE.equals(wanted)){message="通话接管已关闭，尊重手动停用";return;}
+  if(!Boolean.TRUE.equals(wanted)){message="手机通话网关已停用，尊重手动停用";return;}
   if(!Releases.signedBy(Releases.installed(context,Root.SHIZUKU),Releases.SHIZUKU_CERT)){message="需要安装或授权官方 Shizuku";return;}
   // An ordered status broadcast alone cannot wake every force-stopped ROM package.
   // Explicitly start its existing foreground service, without opening an activity.
@@ -82,6 +82,7 @@ public final class HealthMain {
   phase="gateway_status";
   String s=status();
   if(s.contains("PERMISSION_REQUIRED")){message="需要在网关内手动允许 Shizuku 授权";return;}
+  if(s.contains("phoneAccess=blocked")&&s.contains("shizuku=CONNECTED")){message="电话权限或 SIM 信息未就绪，请打开网关完成权限引导；MIUI 请关闭空白通行证。本轮不重启服务";return;}
   if(HealthPolicy.healthy(s)&&(!wantedPbx||gatewayRegistered())){message=repaired?"已恢复网关，权限与 SIP 连接正常":"网关权限、音频与 SIP 注册正常";return;}
   guard();phase="prepare_shizuku";Root.startShizuku(context);
   startGateway();Thread.sleep(1500);s=status();

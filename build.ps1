@@ -1,6 +1,7 @@
 param(
     [string]$SdkRoot=$env:ANDROID_HOME,
-    [string]$JavaHome=$env:JAVA_HOME
+    [string]$JavaHome=$env:JAVA_HOME,
+    [switch]$DevelopmentSigning
 )
 $ErrorActionPreference='Stop'
 if(!$SdkRoot){$SdkRoot=Join-Path $env:LOCALAPPDATA 'Android\Sdk'}
@@ -26,6 +27,15 @@ try {
         & (Join-Path $javaBin 'keytool.exe') -genkeypair -keystore $key -storepass:env VSA_HELPER_SIGNING_PASSWORD -keypass:env VSA_HELPER_SIGNING_PASSWORD -alias voice-sip-assistant -keyalg RSA -keysize 3072 -validity 3650 -dname 'CN=Voice SIP Assistant' -noprompt 2>&1 | Out-Null
         if($LASTEXITCODE){throw 'Signing key generation failed'}
     }
+    if(!$DevelopmentSigning){
+        $rootSource=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'src\com\fann\voicesiphelper\Root.java'))
+        $expected=[regex]::Match($rootSource,'DUALSIM_CERT="([a-f0-9]{64})"').Groups[1].Value
+        $listing=& (Join-Path $javaBin 'keytool.exe') '-J-Duser.language=en' -list -v -alias voice-sip-assistant -keystore $key -storepass:env VSA_HELPER_SIGNING_PASSWORD
+        if($LASTEXITCODE){throw 'Cannot verify the signing certificate.'}
+        $actual=[regex]::Match(($listing -join "`n"),'SHA256:\s*([A-Fa-f0-9:]+)').Groups[1].Value.Replace(':','').ToLowerInvariant()
+        if(!$expected -or $actual -ne $expected){throw 'Signing certificate does not match the app identity. Use the existing production key. DevelopmentSigning is only for disposable CI builds.'}
+        Write-Output 'Production signing certificate verified.'
+    }
     & (Join-Path $buildTools 'aapt2.exe') compile --dir (Join-Path $PSScriptRoot 'res') -o (Join-Path $output 'resources.zip')
     if($LASTEXITCODE){throw 'Resource compilation failed'}
     & (Join-Path $buildTools 'aapt2.exe') link --manifest (Join-Path $PSScriptRoot 'AndroidManifest.xml') -I (Join-Path $sdk 'platforms\android-35\android.jar') (Join-Path $output 'resources.zip') -o (Join-Path $output 'unsigned.apk')
@@ -45,9 +55,9 @@ try {
     if($LASTEXITCODE){throw 'Runtime asset packaging failed'}
     & (Join-Path $buildTools 'zipalign.exe') -f 4 (Join-Path $output 'unsigned.apk') (Join-Path $output 'aligned.apk')
     if($LASTEXITCODE){throw 'APK alignment failed'}
-    & (Join-Path $buildTools 'apksigner.bat') sign --ks $key --ks-key-alias voice-sip-assistant --ks-pass env:VSA_HELPER_SIGNING_PASSWORD --key-pass env:VSA_HELPER_SIGNING_PASSWORD --out (Join-Path $output 'Voice-SIP-Assistant-1.3.2.apk') (Join-Path $output 'aligned.apk')
+    & (Join-Path $buildTools 'apksigner.bat') sign --ks $key --ks-key-alias voice-sip-assistant --ks-pass env:VSA_HELPER_SIGNING_PASSWORD --key-pass env:VSA_HELPER_SIGNING_PASSWORD --out (Join-Path $output 'Voice-SIP-Assistant-1.4.0.apk') (Join-Path $output 'aligned.apk')
     if($LASTEXITCODE){throw 'APK signing failed'}
-    & (Join-Path $buildTools 'apksigner.bat') verify (Join-Path $output 'Voice-SIP-Assistant-1.3.2.apk')
+    & (Join-Path $buildTools 'apksigner.bat') verify (Join-Path $output 'Voice-SIP-Assistant-1.4.0.apk')
     if($LASTEXITCODE){throw 'APK verification failed'}
-    & (Join-Path $buildTools 'aapt2.exe') dump permissions (Join-Path $output 'Voice-SIP-Assistant-1.3.2.apk')
+    & (Join-Path $buildTools 'aapt2.exe') dump permissions (Join-Path $output 'Voice-SIP-Assistant-1.4.0.apk')
 }finally{Remove-Item Env:VSA_HELPER_SIGNING_PASSWORD -ErrorAction SilentlyContinue}

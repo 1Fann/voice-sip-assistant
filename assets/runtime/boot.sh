@@ -2,7 +2,11 @@
 # voice-sip-assistant-owned
 # Start explicitly enabled monitoring / Shizuku preparation. Never place calls.
 BASE=/data/adb/voice-sip-assistant
-BB=/data/adb/ksu/bin/busybox
+BB=
+for candidate in /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox; do
+  if [ -x "$candidate" ]; then BB=$candidate; break; fi
+done
+[ -n "$BB" ] || { echo busybox_missing; exit 20; }
 [ -f "$BASE/.owned" ] || exit 0
 [ -x "$BB" ] || exit 0
 [ -f "$BASE/autostart" ] || [ -f "$BASE/health-enabled" ] || exit 0

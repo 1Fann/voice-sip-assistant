@@ -5,13 +5,21 @@ import java.io.*;
 import java.util.concurrent.TimeUnit;
 
 final class Root {
+ static long runtimeStamp(Context c){try{return c.getPackageManager().getPackageInfo(c.getPackageName(),0).lastUpdateTime;}catch(Exception e){return -1;}}
+ static String busybox()throws Exception{
+  String command="for p in /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox; do if [ -x \"$p\" ]; then echo \"$p\"; exit 0; fi; done; exit 20";
+  String path=run(command,8);
+  if(!path.matches("/data/adb/(magisk|ksu/bin|ap/bin)/busybox"))throw new IOException("需要 Root 管理器提供 BusyBox；请检查 Magisk、KernelSU 或 APatch 安装");
+  return path;
+ }
+
  static final String BASE="/data/adb/voice-sip-assistant";
  static final String OFFICIAL="io.github.sparkcyf.voicesipagent";
  static final String DUALSIM="com.fann.voicesip.dualsim";
  static final String DUALSIM_CERT="4611bccce0a83124ffae63faf4ade682fa97ed398430c4558531115a20d2b6a8";
  static String AGENT=OFFICIAL;
  static final String SHIZUKU="moe.shizuku.privileged.api";
- static void selectAgent(Context context){try{AGENT=Releases.signedBy(Releases.installed(context,DUALSIM),DUALSIM_CERT)?DUALSIM:OFFICIAL;}catch(Exception e){AGENT=OFFICIAL;}}
+ static void selectAgent(Context context){try{AGENT=Releases.signedBy(Releases.installed(context,DUALSIM),DUALSIM_CERT)?DUALSIM:(Releases.installed(context,OFFICIAL)!=null?OFFICIAL:DUALSIM);}catch(Exception e){AGENT=OFFICIAL;}}
  static boolean trustedAgent(Context context)throws Exception{return Releases.signedBy(Releases.installed(context,AGENT),AGENT.equals(DUALSIM)?DUALSIM_CERT:Releases.VSA_CERT);}
  static synchronized String run(String command,int seconds)throws Exception{
   Process p=(android.os.Process.myUid()==0?new ProcessBuilder("/system/bin/sh","-c",command):new ProcessBuilder("su","-M","-c",command)).redirectErrorStream(true).start();
@@ -19,7 +27,7 @@ final class Root {
   Thread reader=new Thread(()->{try{byte[] b=new byte[4096];int n;while((n=p.getInputStream().read(b))!=-1)if(output.size()<131072)output.write(b,0,n);}catch(IOException ignored){}});reader.start();
   if(!p.waitFor(seconds,TimeUnit.SECONDS)){p.destroyForcibly();reader.join(1000);throw new IOException("操作超时，请刷新状态后重试");}
   reader.join(2000);String result=output.toString("UTF-8").trim();
-  if(p.exitValue()!=0)throw new IOException("Root 操作失败，请在 BakaSU 为 Voice SIP 助手授权；已授权时请查看系统安装提示");
+  if(p.exitValue()!=0)throw new IOException("Root 操作失败，请在手机的 Root 管理器中为 Voice SIP 助手授权；已授权时请查看系统安装提示");
   return result;
  }
  static String quote(String value){return "'"+value.replace("'","'\\''")+"'";}
@@ -30,13 +38,12 @@ final class Root {
    case "off":args="--es op takeover --ez on false";break;
    case "on":args="--es op takeover --ez on true";break;
    case "companion":args="--es op provision --ei call_access 1 --ei audio_method 2";break;
-   case "unmute":args="--es op earpiece-mute --ez on false";break;
    case "reconnect":args="--es op sip-restart";break;
    case "setup":args="--es op setup";break;
    default:throw new IOException("无效控制操作");
   }
   String value=run("am broadcast --receiver-foreground -n "+AGENT+"/io.github.sparkcyf.voicesipagent.app.AdbControlReceiver "+args,20);
-  if(!value.contains("result=1"))throw new IOException("官方 App 尚未确认操作，请打开官方页面查看 Health 后重试");
+  if(!value.contains("result=1"))throw new IOException("网关尚未确认操作，请打开网关页面查看 Health 后重试");
   return value;
  }
  static void stage(Context c)throws Exception{
@@ -81,11 +88,18 @@ final class Root {
   syncBoot();if(enabled)healthLaunch();
  }
  static void healthLaunch()throws Exception{
-  run("/data/adb/ksu/bin/busybox setsid /system/bin/sh "+BASE+"/health.sh loop </dev/null >/dev/null 2>&1 3>&- 4>&- 5>&- 6>&- 7>&- 8>&- 9>&- &",10);
+  run(busybox()+" setsid /system/bin/sh "+BASE+"/health.sh loop </dev/null >/dev/null 2>&1 3>&- 4>&- 5>&- 6>&- 7>&- 8>&- 9>&- &",10);
  }
  static void healthNow(Context c)throws Exception{
   stage(c);if(!run("test -f "+BASE+"/health-enabled && echo enabled || true",5).equals("enabled"))throw new IOException("请先开启自动检查与恢复");
   run("touch "+BASE+"/health-now",5);healthLaunch();
+ }
+ static boolean repairOrSchedule(Context c)throws Exception{
+  // The root monitor holds the cross-app repair lock. Do not race it with a UI request.
+  if(run("test -f "+BASE+"/health-enabled && echo enabled || true",5).equals("enabled")){
+   healthNow(c);return false;
+  }
+  repairMtk(c,true);return true;
  }
  static void restoreDialer()throws Exception{
   control("off");boolean off=false;
@@ -102,14 +116,20 @@ final class Root {
   if(enable)run("touch "+BASE+"/mtk-compat-enabled",10);
   String state=control("status");
   if(state.contains("shizuku=CONNECTED"))return;
-  if(!enable&&!run("test -f "+BASE+"/mtk-compat-enabled && echo enabled || true",5).equals("enabled"))return;
-  if(state.contains("PERMISSION_REQUIRED"))throw new IOException("请先在官方 App 点 Grant Shizuku 并允许，再重试兼容修复");
+  // Permission denied and manual OFF always win over recovery.
+  if(!state.contains("takeover=on")||state.contains(" pending"))return;
+  if(state.contains("PERMISSION_REQUIRED")||state.contains("PERMISSION_DENIED"))throw new IOException("请先在网关中点 Grant Shizuku 并允许，再重试兼容修复");
   if(!state.contains("calls=No cellular call"))throw new IOException("请先结束当前手机通话，再修复连接");
-  control("off");Thread.sleep(500);control("on");Thread.sleep(800);
+  // Keep the gateway enabled. Its bounded bind retry creates an authorized request;
+  // do not toggle OFF/ON and race a user's deliberate stop.
+  if(state.contains("SHIZUKU_NOT_RUNNING")||state.contains("STOPPED"))return;
+  Thread.sleep(800);
+  state=control("status");
+  if(!state.contains("takeover=on")||!state.contains("calls=No cellular call"))return;
   String helper=context.getApplicationInfo().sourceDir;
   String shizuku=context.getPackageManager().getApplicationInfo(SHIZUKU,0).sourceDir;
-  run("/data/adb/ksu/bin/busybox setsid env CLASSPATH="+quote(helper+":"+shizuku)+" app_process /system/bin --nice-name=vsa_mtk_service_root com.fann.voicesiphelper.MtkServiceBootstrap "+quote(AGENT)+" </dev/null >"+BASE+"/compat-status.log 2>&1 3>&- 4>&- 5>&- 6>&- 7>&- 8>&- 9>&- &",10);
+  run(busybox()+" setsid env CLASSPATH="+quote(helper+":"+shizuku)+" app_process /system/bin --nice-name=vsa_mtk_service_root com.fann.voicesiphelper.MtkServiceBootstrap "+quote(AGENT)+" </dev/null >"+BASE+"/compat-status.log 2>&1 3>&- 4>&- 5>&- 6>&- 7>&- 8>&- 9>&- &",10);
   for(int attempt=0;attempt<12;attempt++){Thread.sleep(800);state=control("status");if(state.contains("shizuku=CONNECTED"))return;}
-  throw new IOException("兼容服务未连接，请确认 Shizuku 仍在运行并已授权官方 App");
+  throw new IOException("兼容服务未连接，请确认 Shizuku 仍在运行并已授权网关");
  }
 }

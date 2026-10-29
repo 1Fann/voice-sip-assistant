@@ -25,24 +25,29 @@ public class DeployService extends Service {
  }
  void execute(String action)throws Exception{
   if(action.equals("CHECK")){
-   Releases.Release r=Releases.latest();getSharedPreferences("state",0).edit().putString("latest",r.version).apply();report("官方最新正式版："+r.version);return;
+   Releases.Release r=Releases.latest();getSharedPreferences("state",0).edit().putString("latest",r.version).apply();report("整合网关最新正式版："+r.version);return;
   }
-  if(!Root.run("id -u",15).trim().equals("0"))throw new IOException("请在 BakaSU 为 Voice SIP 助手授予 Root");
+  if(!Root.run("id -u",15).trim().equals("0"))throw new IOException("请在手机的 Root 管理器中为 Voice SIP 助手授权");
   switch(action){
    case "DEPLOY":deploy();break;
    case "SHIZUKU":
-    prepareShizuku();Root.startShizuku(this);refresh();report("Shizuku 已启动；请在官方 App 中点 Grant Shizuku 并允许");break;
-   case "REFRESH":refresh();report("状态已刷新");break;
-   case "OFF":Root.control("off");refresh();report("关闭接管请求已提交；通话中会等挂断后生效");break;
+    prepareShizuku();Root.startShizuku(this);refresh();report("Shizuku 已启动；未授权时请在网关中点 Grant Shizuku 并允许");break;
+   case "REFRESH":Root.stage(this);refresh();report("状态已刷新");break;
+   case "OFF":Root.control("off");refresh();report("停用手机通话网关请求已提交；通话中会等挂断后生效");break;
    case "ON":
-    prepareShizuku();Root.startShizuku(this);Root.run("am start -n "+Root.AGENT+"/io.github.sparkcyf.voicesipagent.app.MainActivity",15);Root.control("companion");Root.control("on");Root.repairMtk(this,false);refresh();report("伴侣模式接管请求已提交，保留本机静音设置；来电行为由服务器路由决定");break;
+    prepareShizuku();Root.startShizuku(this);Root.run("am start -n "+Root.AGENT+"/io.github.sparkcyf.voicesipagent.app.MainActivity",15);Root.control("companion");Root.control("on");Root.repairOrSchedule(this);refresh();report("手机通话网关已请求启用，正在检查依赖；请等权限、音频与 SIP 均就绪再测试通话");break;
    case "HEALTH_NOW":Root.healthNow(this);refresh();report("已提交立即检查，请稍后查看自动恢复状态");break;
    case "HEALTH_STATUS":healthStatus();break;
+   case "REPAIR_BINDING":
+    if(!Root.control("status").contains("takeover=on")){report("网关已手动停用，不执行恢复");break;}
+    verifyShizuku();boolean done=Root.repairOrSchedule(this);refresh();report(done?"权限服务检查完成，请核对网关状态":"已提交权限服务恢复，正在等待独立检查完成");break;
+   case "UPDATE_RUNTIME":
+    Root.stage(this);Root.syncBoot();if(Root.run("test -f "+Root.BASE+"/health-enabled && echo yes || true",5).equals("yes"))Root.healthLaunch();getSharedPreferences("state",0).edit().putLong("runtimeStamp",Root.runtimeStamp(this)).apply();report("运行组件已随 APK 更新");break;
    case "MTK_FIX":
-    verifyShizuku();Root.startShizuku(this);Root.run("am start -n "+Root.AGENT+"/io.github.sparkcyf.voicesipagent.app.MainActivity",15);Root.repairMtk(this,true);refresh();report("联发科权限服务已连接；以后可用本助手的启用按钮恢复");break;
+    verifyShizuku();Root.startShizuku(this);Root.run("am start -n "+Root.AGENT+"/io.github.sparkcyf.voicesipagent.app.MainActivity",15);Root.repairOrSchedule(this);refresh();report("权限服务恢复已请求，请等待网关显示连接就绪");break;
    case "RECONNECT":Root.control("reconnect");refresh();report("重连请求已提交，请刷新查看注册状态");break;
-   case "RESTORE":Root.restoreDialer();refresh();report("接管已关闭，已恢复系统电话；请实测小米互联来电");break;
-   case "BOOT_ON":prepareShizuku();Root.startShizuku(this);Root.autostart(this,true);refresh();report("已开启：开机应用数据可用后准备 Shizuku；无密码时通常无需手动解锁，不自动开启接管");break;
+   case "RESTORE":Root.restoreDialer();refresh();report("手机通话网关已停用，系统默认电话已恢复；重新启用网关后可继续使用 SIP 通话");break;
+   case "BOOT_ON":prepareShizuku();Root.startShizuku(this);Root.autostart(this,true);refresh();report("已开启：开机应用数据可用后准备 Shizuku；无密码时通常无需手动解锁，不启用已手动停用的网关");break;
    case "BOOT_OFF":Root.autostart(this,false);refresh();report("已关闭本助手的 Shizuku 开机准备");break;
    default:throw new IOException("无效操作");
   }
@@ -58,21 +63,26 @@ public class DeployService extends Service {
   }else verifyShizuku();
  }
  void deploy()throws Exception{
-  if(Root.AGENT.equals(Root.DUALSIM))throw new IOException("当前使用整合版，请安装对应网关更新；官方升级不会覆盖整合版");
+  if(Root.AGENT.equals(Root.OFFICIAL))throw new IOException("检测到上游官方版，请先停用并备份其配置；本助手不会安装第二个同时运行的网关");
+  Root.AGENT=Root.DUALSIM;
   if(!android.os.Build.SUPPORTED_ABIS[0].equals("arm64-v8a"))throw new IOException("当前上游 APK 仅支持 ARM64 手机");
   report("正在获取 GitHub 最新正式版…");Releases.Release r=Releases.latest();getSharedPreferences("state",0).edit().putString("latest",r.version).apply();
   boolean fresh=Releases.installed(this,Root.AGENT)==null;
   File agent=Releases.download(this,"Voice-SIP-Agent",r.url,r.size,r.sha,this::report);
   // Validate the agent before installing its dependency.
   PackageInfo info=getPackageManager().getPackageArchiveInfo(agent.getAbsolutePath(),android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES);
-  if(info==null||!info.packageName.equals(Root.AGENT)||!Releases.signedBy(info,Releases.VSA_CERT))throw new IOException("Voice SIP Agent 官方签名校验失败");
+  if(info==null||!info.packageName.equals(Root.AGENT)||!Releases.signedBy(info,Root.DUALSIM_CERT))throw new IOException("Voice SIP Agent 整合网关签名校验失败");
   prepareShizuku();
-  Releases.install(this,agent,Root.AGENT,Releases.VSA_CERT,this::report);
-  if(fresh){report("正在设置初始状态：关闭通话接管…");Root.control("off");Root.control("companion");Root.control("unmute");}
+  Releases.install(this,agent,Root.AGENT,Root.DUALSIM_CERT,this::report);
+  Root.stage(this);
+  if(fresh){report("正在设置初始状态：暂不启用手机通话网关，保留本机静音设置，等待账号与权限配置…");Root.control("off");Root.control("companion");}
   if(Root.run("pidof shizuku_server || true",10).isEmpty()){report("正在以 Root 模式启动 Shizuku…");Root.startShizuku(this);}
+  Root.startShizuku(this);
+  if(fresh){Root.autostart(this,true);Root.healthConfigure(this,true,5);}
+  Root.run("am start -n "+Root.AGENT+"/io.github.sparkcyf.voicesipagent.app.MainActivity",15);
   refresh();getSharedPreferences("state",0).edit().putString("verified",Releases.digest(agent)).apply();
   PackageInfo installedAgent=Releases.installed(this,Root.AGENT);
-  report("已部署官方 "+(installedAgent==null?r.version:installedAgent.versionName)+"；请打开官方 App 授权 Shizuku 并填写 SIP 配置");
+  report("已部署整合网关 "+(installedAgent==null?r.version:installedAgent.versionName)+"；请打开整合网关 App 授权 Shizuku 并填写 SIP 配置；首次权限向导会检查电话信息，完成后启用网关");
  }
  void refresh()throws Exception{
   String root=Root.run("printf 'dialer='; cmd role get-role-holders --user 0 android.app.role.DIALER; printf 'shizuku='; if pidof shizuku_server >/dev/null; then echo running; else echo stopped; fi; printf 'boot='; if [ -f "+Root.BASE+"/autostart ]; then echo on; else echo off; fi; printf 'compat='; if [ -f "+Root.BASE+"/mtk-compat-enabled ]; then echo on; else echo off; fi",15);

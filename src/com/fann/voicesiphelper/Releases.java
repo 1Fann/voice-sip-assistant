@@ -18,24 +18,24 @@ final class Releases {
  interface Progress {void report(String message);}
  static final class Release {String version,url,sha;long size;}
  static Release latest()throws Exception{
-  HttpsURLConnection c=connection("https://api.github.com/repos/sparkcyf/android-voice-sip-agent/releases/latest");
+  HttpsURLConnection c=connection("https://api.github.com/repos/1Fann/voice-sip-gateway/releases/latest");
   try{
    if(c.getResponseCode()!=200)throw new IOException("无法获取 GitHub 最新版，请检查网络或稍后重试");
    ByteArrayOutputStream out=new ByteArrayOutputStream();try(InputStream in=c.getInputStream()){byte[] b=new byte[4096];int n;while((n=in.read(b))!=-1){if(out.size()+n>262144)throw new IOException("版本信息超出预期");out.write(b,0,n);}}
    JSONObject json=new JSONObject(out.toString("UTF-8"));
    if(json.optBoolean("draft")||json.optBoolean("prerelease"))throw new IOException("没有可用的正式版本");
-   String version=json.getString("tag_name");if(!version.matches("v[0-9]+\\.[0-9]+\\.[0-9]+"))throw new IOException("上游版本格式已改变，请更新助手");
+   String version=json.getString("tag_name");if(!version.matches("v[0-9]+\\.[0-9]+\\.[0-9]+-custom\\.[0-9]+"))throw new IOException("上游版本格式已改变，请更新助手");
    JSONArray assets=json.getJSONArray("assets");Release release=null;
    for(int i=0;i<assets.length();i++){
     JSONObject asset=assets.getJSONObject(i);
-    if(!asset.getString("name").equals("voice-sip-agent-"+version.substring(1)+".apk"))continue;
+    if(!asset.getString("name").equals("Voice-SIP-Gateway-"+version.substring(1)+".apk"))continue;
     if(release!=null)throw new IOException("上游存在多个同名安装包，请稍后重试");
     release=new Release();release.version=version;release.url=asset.getString("browser_download_url");release.size=asset.getLong("size");
-    if(!release.url.equals("https://github.com/sparkcyf/android-voice-sip-agent/releases/download/"+version+"/voice-sip-agent-"+version.substring(1)+".apk"))throw new IOException("下载地址未通过来源检查");
+    if(!release.url.equals("https://github.com/1Fann/voice-sip-gateway/releases/download/"+version+"/Voice-SIP-Gateway-"+version.substring(1)+".apk"))throw new IOException("下载地址未通过来源检查");
     String digest=asset.optString("digest","");release.sha=digest.matches("sha256:[a-fA-F0-9]{64}")?digest.substring(7).toLowerCase(java.util.Locale.ROOT):"";
     if(release.size<100000||release.size>83886080)throw new IOException("安装包大小异常");
    }
-   if(release==null)throw new IOException("最新版暂无官方 APK，请稍后重试");return release;
+   if(release==null)throw new IOException("最新版暂无发布 APK，请稍后重试");return release;
   }finally{c.disconnect();}
  }
  static HttpsURLConnection connection(String url)throws Exception{
@@ -85,14 +85,14 @@ final class Releases {
  }
  static void install(Context c,File file,String pkg,String cert,Progress progress)throws Exception{
   PackageInfo archive=c.getPackageManager().getPackageArchiveInfo(file.getAbsolutePath(),PackageManager.GET_SIGNING_CERTIFICATES);
-  if(archive==null||!archive.packageName.equals(pkg)||!signedBy(archive,cert))throw new IOException("安装包身份或官方签名校验失败，已停止安装");
+  if(archive==null||!archive.packageName.equals(pkg)||!signedBy(archive,cert))throw new IOException("安装包身份或发布签名校验失败，已停止安装");
   if(pkg.equals(Root.AGENT)&&archive.applicationInfo.minSdkVersion>android.os.Build.VERSION.SDK_INT)throw new IOException("最新版已不支持当前安卓版本");
   PackageInfo current=installed(c,pkg);
   if(current!=null){
    if(!signedBy(current,cert))throw new IOException("已安装同名 App 的签名不同，请自行备份配置后处理；助手不会卸载它");
    if(current.getLongVersionCode()>archive.getLongVersionCode()||(current.getLongVersionCode()==archive.getLongVersionCode()&&java.util.Objects.equals(current.versionName,archive.versionName))){progress.report("已安装相同或更高版本，保留原配置");return;}
   }
-  progress.report("正在安装已校验的官方 APK…");
+  progress.report("正在安装已校验的发布 APK…");
   String temp="/data/local/tmp/voice-sip-assistant-"+android.os.Process.myUid()+"-"+System.nanoTime()+".apk";
   String q=Root.quote(temp);
   String result=Root.run("set -eu; trap 'rm -f "+temp+"' EXIT; cp "+Root.quote(file.getAbsolutePath())+" "+q+"; chmod 644 "+q+"; pm install -r "+q,120);
