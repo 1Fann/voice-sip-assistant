@@ -43,10 +43,12 @@ final class Root {
    default:throw new IOException("无效控制操作");
   }
   String value=run("am broadcast --receiver-foreground -n "+AGENT+"/io.github.sparkcyf.voicesipagent.app.AdbControlReceiver "+args,20);
-  if(!value.contains("result=1"))throw new IOException("网关尚未确认操作，请打开网关页面查看 Health 后重试");
+  if(!value.contains("result=1"))throw new IOException("网关尚未确认操作，请打开网关页面查看运行状态 后重试");
   return value;
  }
  static void stage(Context c)throws Exception{
+  String installedMonitor=run("sha256sum "+BASE+"/health.sh 2>/dev/null | cut -d ' ' -f 1 || true",8);
+
   if(!Releases.signedBy(Releases.installed(c,"com.fann.voicesiphelper"),DUALSIM_CERT))throw new IOException("助手签名校验失败");
   String helperHash=Releases.digest(new File(c.getApplicationInfo().sourceDir));
   android.content.pm.PackageInfo dependency=Releases.installed(c,SHIZUKU);String shizukuHash="";
@@ -55,6 +57,11 @@ final class Root {
   for(String name:c.getAssets().list("runtime"))try(InputStream in=c.getAssets().open("runtime/"+name);OutputStream out=new FileOutputStream(new File(dir,name))){byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);}
   run("set -eu; umask 077; if [ -e "+BASE+" ] && [ ! -f "+BASE+"/.owned ]; then exit 21; fi; mkdir -p "+BASE+"; chmod 700 "+BASE+"; touch "+BASE+"/.owned; cp "+quote(dir.getAbsolutePath())+"/boot.sh "+BASE+"/boot.sh; cp "+quote(dir.getAbsolutePath())+"/health.sh "+BASE+"/health.sh; chmod 700 "+BASE+"/boot.sh "+BASE+"/health.sh",15);
   run("set -eu; umask 077; printf '%s\\n' "+quote(helperHash)+" > "+BASE+"/health-helper.sha256; printf '%s\\n' "+quote(shizukuHash)+" > "+BASE+"/health-shizuku.sha256",10);
+  String currentMonitor=run("sha256sum "+BASE+"/health.sh | cut -d ' ' -f 1",8);
+  if(!installedMonitor.equals(currentMonitor)){
+   run("p=$(cat "+BASE+"/health-loop.pid 2>/dev/null); case $p in ''|*[!0-9]*) ;; *) if [ -r /proc/$p/cmdline ] && tr '\\000' ' ' </proc/$p/cmdline | grep -qF '"+BASE+"/health.sh --loop'; then kill -TERM $p; i=0; while kill -0 $p 2>/dev/null && [ $i -lt 10 ]; do sleep 1; i=$((i+1)); done; fi;; esac",15);
+   if(run("test -f "+BASE+"/health-enabled && echo yes || true",8).equals("yes"))healthLaunch();
+  }
  }
  static void startShizuku(Context c)throws Exception{
   android.content.pm.ApplicationInfo info=c.getPackageManager().getApplicationInfo(SHIZUKU,0);
@@ -101,14 +108,14 @@ final class Root {
   }
   repairMtk(c,true);return true;
  }
- static void restoreDialer()throws Exception{
+ static void restoreDialer(Context context)throws Exception{
   control("off");boolean off=false;
   for(int i=0;i<6;i++){Thread.sleep(1000);String s=control("status");if(s.contains("takeover=off")&&!s.contains(" pending")){off=true;break;}}
   if(!off)throw new IOException("接管关闭尚未完成，可能仍有通话；请结束通话后再恢复系统电话");
   String pkg=run("cmd telecom get-system-dialer",10).trim();
   if(!pkg.matches("[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+"))throw new IOException("无法识别系统电话，请到系统默认应用设置选择电话 App");
   run("cmd telecom add-or-remove-call-companion-app "+AGENT+" 0 >/dev/null 2>&1 || true; cmd role add-role-holder --user 0 android.app.role.DIALER "+pkg,15);
-  if(!run("cmd role get-role-holders --user 0 android.app.role.DIALER",10).trim().equals(pkg))throw new IOException("系统未确认电话恢复，请到默认应用设置检查");
+  if(!pkg.equals(context.getSystemService(android.telecom.TelecomManager.class).getDefaultDialerPackage()))throw new IOException("系统未确认电话恢复，请到默认应用设置检查");
  }
  static void repairMtk(Context context,boolean enable)throws Exception{
   if(!trustedAgent(context)||!Releases.signedBy(Releases.installed(context,SHIZUKU),Releases.SHIZUKU_CERT))throw new IOException("网关或 Shizuku 签名未通过校验");

@@ -31,6 +31,7 @@ if [ "$1" = --check ]; then
 fi
 printf '%s\n' "$$" > "$BASE/health-loop.pid"
 trap 'rm -f "$BASE/health-loop.pid"' EXIT
+trap 'exit 0' TERM INT
 while [ -f "$BASE/health-enabled" ]; do
  /system/bin/sh "$BASE/health.sh" once
  MINUTES=$(cat "$BASE/health-minutes" 2>/dev/null)
@@ -41,5 +42,10 @@ while [ -f "$BASE/health-enabled" ]; do
   [ -f "$BASE/health-now" ] && { rm -f "$BASE/health-now"; break; }
   sleep 5
   LEFT=$((LEFT - 5))
+  # A cheap service-owner check detects task-cleaner damage without waiting a full interval.
+  # Full recovery still applies the manual-OFF and active-call guards in HealthMain.
+  if [ $((LEFT % 10)) -eq 0 ] && ! dumpsys activity services com.fann.voicesip.dualsim 2>/dev/null | "$BB" grep -q 'isForeground=true'; then
+   break
+  fi
  done
 done

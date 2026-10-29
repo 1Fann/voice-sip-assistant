@@ -73,6 +73,7 @@ public final class HealthMain {
   if(!Releases.signedBy(Releases.installed(context,Root.SHIZUKU),Releases.SHIZUKU_CERT)){message="需要安装或授权官方 Shizuku";return;}
   // An ordered status broadcast alone cannot wake every force-stopped ROM package.
   // Explicitly start its existing foreground service, without opening an activity.
+  if(!BackgroundAccess.repairAuthorized(context)){message="后台运行受限，请打开助手允许后台运行与自启动";return;}
   phase="gateway_start";
   String gatewayOwner=Root.run("dumpsys activity services "+Root.AGENT,10);
   if(!gatewayOwner.contains("isForeground=true")){
@@ -83,7 +84,7 @@ public final class HealthMain {
   String s=status();
   if(s.contains("PERMISSION_REQUIRED")){message="需要在网关内手动允许 Shizuku 授权";return;}
   if(s.contains("phoneAccess=blocked")&&s.contains("shizuku=CONNECTED")){message="电话权限或 SIM 信息未就绪，请打开网关完成权限引导；MIUI 请关闭空白通行证。本轮不重启服务";return;}
-  if(HealthPolicy.healthy(s)&&(!wantedPbx||gatewayRegistered())){message=repaired?"已恢复网关，权限与 SIP 连接正常":"网关权限、音频与 SIP 注册正常";return;}
+  if(foreground()&&HealthPolicy.healthy(s)&&(!wantedPbx||gatewayRegistered())){message=repaired?"已恢复网关，权限与 SIP 连接正常":"网关权限、音频与 SIP 注册正常";return;}
   guard();phase="prepare_shizuku";Root.startShizuku(context);
   startGateway();Thread.sleep(1500);s=status();
   if(s.contains("PERMISSION_REQUIRED")){message="需要在网关内手动允许 Shizuku 授权";return;}
@@ -104,10 +105,11 @@ public final class HealthMain {
   guard();if(!Boolean.TRUE.equals(takeover())){message="接管已手动关闭，取消恢复";return;}
   phase="sip_reconnect";Root.control("reconnect");repaired=true;Thread.sleep(2500);s=status();
   boolean contact=!wantedPbx||gatewayRegistered();
-  message=HealthPolicy.healthy(s)&&contact?"已恢复权限、音频与 SIP 连接":"恢复尚未完成，将在下轮重试";
+  message=foreground()&&HealthPolicy.healthy(s)&&contact?"已恢复权限、音频与 SIP 连接":"恢复尚未完成，将在下轮重试";
  }
+ static boolean foreground()throws Exception{return Root.run("dumpsys activity services "+Root.AGENT,10).contains("isForeground=true");}
  static void startGateway()throws Exception {
-  Root.run("am start-foreground-service -n "+Root.AGENT+"/io.github.sparkcyf.voicesipagent.app.GatewayService",15);
+  Root.run("am start-foreground-service --user 0 -n "+Root.AGENT+"/io.github.sparkcyf.voicesipagent.app.GatewayService",15);
  }
  static void restartShizuku()throws Exception {
   guard();String ids=Root.run("pidof shizuku_server || true",5);

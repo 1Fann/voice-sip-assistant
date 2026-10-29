@@ -17,9 +17,19 @@ import java.util.*;
 public class MainActivity extends Activity {
  final Handler handler=new Handler(Looper.getMainLooper());
  final int ink=Color.rgb(27,47,51),muted=Color.rgb(91,112,118),teal=Color.rgb(13,102,101);
- LinearLayout body;TextView versions,status,progress,healthStatus;Switch boot,health;EditText healthMinutes;boolean updating;volatile boolean readingHealth;int ticks;
+ LinearLayout body;TextView versions,status,progress,healthStatus;Switch boot,health;EditText healthMinutes;boolean updating;volatile boolean readingHealth;int ticks;TextView backgroundStatus;boolean backgroundPrompted;
  final ArrayList<Button> operations=new ArrayList<>();
  final Runnable tick=new Runnable(){public void run(){update();handler.postDelayed(this,1500);}};
+ void background(boolean explicit){new Thread(()->{try{
+  String missing=BackgroundAccess.missing(this);runOnUiThread(()->{
+   backgroundStatus.setText(missing.isEmpty()?"后台运行、电池优化与自启动检查通过":"需要允许后台运行："+missing+"。否则清后台后可能无法恢复。");
+   if(explicit||(!missing.isEmpty()&&!backgroundPrompted)){
+    backgroundPrompted=true;BackgroundAccess.explain(this,()->new Thread(()->{try{
+     BackgroundAccess.allow(this);Root.healthLaunch();runOnUiThread(()->background(false));
+    }catch(Exception e){runOnUiThread(()->new AlertDialog.Builder(this).setTitle("后台设置未完成").setMessage(e.getMessage()).setPositiveButton("确定",null).show());}}).start());
+   }
+  });
+ }catch(Exception e){runOnUiThread(()->backgroundStatus.setText("先授予 Root，再点击检查 / 允许后台运行"));}}).start();}
  int dp(float n){return (int)(n*getResources().getDisplayMetrics().density+.5f);}
  GradientDrawable shape(int color,int radius){GradientDrawable g=new GradientDrawable();g.setColor(color);g.setCornerRadius(dp(radius));return g;}
  TextView text(String value,int size,int color){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(color);t.setLineSpacing(dp(3),1);return t;}
@@ -38,7 +48,11 @@ getWindow().setStatusBarColor(Color.rgb(242,247,246));getWindow().setNavigationB
   ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setBackgroundColor(Color.rgb(242,247,246));body=new LinearLayout(this);body.setOrientation(1);body.setPadding(dp(18),dp(22),dp(18),dp(30));scroll.addView(body);setContentView(scroll);
   TextView title=text("Voice SIP 助手",29,ink);title.setTypeface(null,Typeface.BOLD);body.addView(title);add(body,text("管理通话网关 · 默认卡与指定 SIM 呼出",15,muted),6);
   LinearLayout stateCard=card("当前状态","");versions=text("正在读取版本…",15,ink);stateCard.addView(versions);status=text("点击刷新状态并授权 Root",14,muted);add(stateCard,status,12);progress=text("就绪",14,teal);add(stateCard,progress,14);
-  LinearLayout monitor=card("网关自动检查与恢复","检查 Shizuku、网关音频就绪和 SIP 注册，异常时自动恢复；服务器由 Asterisk 助手独立检查与恢复。清理助手后台仍有效，开机应用数据可用后自动恢复检查；无锁屏密码时通常无需手动解锁，有密码时持续等待首次解锁。通话时跳过修复，保留静音，尊重手动停用；严重权限异常时可能打开网关页面。深度休眠可能延后检查。");
+  LinearLayout bg=card("后台运行准备","助手与网关都需要允许后台运行；不需要锁定最近任务。");
+  backgroundStatus=text("正在检查后台运行与自启动权限…",14,muted);bg.addView(backgroundStatus);
+  button(bg,"检查 / 允许后台运行",false,()->background(true));
+  background(false);
+  LinearLayout monitor=card("网关自动检查与恢复","每 10 秒检查后台服务是否退出；按下方间隔完整检查 Shizuku、网关音频就绪和 SIP 注册，异常时自动恢复；服务器由 Asterisk 助手独立检查与恢复。清理助手后台仍有效，开机应用数据可用后自动恢复检查；无锁屏密码时通常无需手动解锁，有密码时持续等待首次解锁。通话时跳过修复，保留静音，尊重手动停用；严重权限异常时可能打开网关页面。深度休眠可能延后检查。");
   health=new Switch(this);health.setText("开启自动检查与恢复");health.setTextSize(16);add(monitor,health,12);
   health.setOnCheckedChangeListener((b,on)->{if(updating)return;updating=true;health.setChecked(!on);updating=false;saveHealth(on);});
   add(monitor,text("检查间隔（分钟，1–1440）",14,ink),12);
@@ -53,7 +67,7 @@ getWindow().setStatusBarColor(Color.rgb(242,247,246));getWindow().setNavigationB
   Button open=button(control,"打开 Voice SIP 网关 / 配置",true,()->open(Root.AGENT));operations.remove(open);
   button(control,"刷新状态 / Root 授权",false,()->start("REFRESH"));
   button(control,"启动 / 修复 Shizuku",false,()->start("SHIZUKU"));
-  button(control,"修复联发科 Shizuku 连接",false,()->confirm("修复权限服务连接","适用于 Shizuku 已授权但网关一直显示 BINDING 的联发科系统。使用已授权的服务请求启动 Root 兼容入口。修复可能重新连接网关，请先结束通话。",()->start("MTK_FIX")));
+  button(control,"修复联发科 Shizuku 连接",false,()->confirm("修复权限服务连接","适用于 Shizuku 已授权但网关一直显示“正在连接权限服务” 的联发科系统。使用已授权的服务请求启动 Root 兼容入口。修复可能重新连接网关，请先结束通话。",()->start("MTK_FIX")));
   Button shi=button(control,"打开 Shizuku 授权管理",false,()->open(Root.SHIZUKU));operations.remove(shi);
   button(control,"重新连接 SIP",false,()->start("RECONNECT"));
   LinearLayout calls=card("手机通话网关","连接手机 SIM 与 SIP 服务器：将手机来电送到 Groundwire 等 SIP 客户端，并让客户端通过手机 SIM 呼出。使用这些功能时请保持启用。停用会同时停止来电转接和 SIM 呼出，服务器的 600 回声测试仍可能正常。");
@@ -63,7 +77,7 @@ getWindow().setStatusBarColor(Color.rgb(242,247,246));getWindow().setNavigationB
   button(advanced,"停用网关并恢复系统默认电话",false,()->confirm("恢复系统默认电话","将先停用手机通话网关，等待通话结束后撤销网关的电话访问登记，并在需要时恢复原默认电话应用。之后 SIP 客户端将无法通过手机 SIM 接打电话，重新启用网关后恢复。",()->start("RESTORE")));
   LinearLayout startup=card("开机准备","此独立选项只准备 Shizuku，不会启用已手动停用的手机通话网关。上方自动恢复开启时，会另行在开机应用数据可用后恢复检查并准备所需服务；不要求滑开无密码的锁屏页面。");
   boot=new Switch(this);boot.setText("开机准备 Shizuku");boot.setTextSize(15);add(startup,boot,12);boot.setOnCheckedChangeListener((b,on)->{if(updating)return;updating=true;boot.setChecked(!on);updating=false;start(on?"BOOT_ON":"BOOT_OFF");});
-  LinearLayout about=card("来源与说明","Voice SIP 助手 1.4.0 是独立管理工具，与上游作者无隶属关系。一键部署获取本项目生产签名的整合网关；基于上游的修改版，支持默认卡及按次选卡。自动检查与恢复使用 Root 独立运行，恢复清理造成的异常；需要时可能重启 Shizuku，其他使用它的应用可能短暂断开。不修改 SIP 密码或通话音频设置。卸载助手前请关闭自动检查与恢复。");
+  LinearLayout about=card("来源与说明","Voice SIP 助手 1.4.1 是独立管理工具，与上游作者无隶属关系。一键部署获取本项目生产签名的整合网关；基于上游的修改版，支持默认卡及按次选卡。自动检查与恢复使用 Root 独立运行，恢复清理造成的异常；需要时可能重启 Shizuku，其他使用它的应用可能短暂断开。不修改 SIP 密码或通话音频设置。卸载助手前请关闭自动检查与恢复。");
   Button source=button(about,"查看上游项目与使用说明",false,()->startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://github.com/sparkcyf/android-voice-sip-agent"))));operations.remove(source);
   if(Build.VERSION.SDK_INT>=33&&checkSelfPermission("android.permission.POST_NOTIFICATIONS")!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"},1);
  }

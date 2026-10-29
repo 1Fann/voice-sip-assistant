@@ -31,7 +31,7 @@ public class DeployService extends Service {
   switch(action){
    case "DEPLOY":deploy();break;
    case "SHIZUKU":
-    prepareShizuku();Root.startShizuku(this);refresh();report("Shizuku 已启动；未授权时请在网关中点 Grant Shizuku 并允许");break;
+    prepareShizuku();Root.startShizuku(this);refresh();report("Shizuku 已启动；未授权时请在网关中点“允许 Shizuku 授权”");break;
    case "REFRESH":Root.stage(this);refresh();report("状态已刷新");break;
    case "OFF":Root.control("off");refresh();report("停用手机通话网关请求已提交；通话中会等挂断后生效");break;
    case "ON":
@@ -46,7 +46,7 @@ public class DeployService extends Service {
    case "MTK_FIX":
     verifyShizuku();Root.startShizuku(this);Root.run("am start -n "+Root.AGENT+"/io.github.sparkcyf.voicesipagent.app.MainActivity",15);Root.repairOrSchedule(this);refresh();report("权限服务恢复已请求，请等待网关显示连接就绪");break;
    case "RECONNECT":Root.control("reconnect");refresh();report("重连请求已提交，请刷新查看注册状态");break;
-   case "RESTORE":Root.restoreDialer();refresh();report("手机通话网关已停用，系统默认电话已恢复；重新启用网关后可继续使用 SIP 通话");break;
+   case "RESTORE":Root.restoreDialer(this);refresh();report("手机通话网关已停用，系统默认电话已恢复；重新启用网关后可继续使用 SIP 通话");break;
    case "BOOT_ON":prepareShizuku();Root.startShizuku(this);Root.autostart(this,true);refresh();report("已开启：开机应用数据可用后准备 Shizuku；无密码时通常无需手动解锁，不启用已手动停用的网关");break;
    case "BOOT_OFF":Root.autostart(this,false);refresh();report("已关闭本助手的 Shizuku 开机准备");break;
    default:throw new IOException("无效操作");
@@ -85,7 +85,8 @@ public class DeployService extends Service {
   report("已部署整合网关 "+(installedAgent==null?r.version:installedAgent.versionName)+"；请打开整合网关 App 授权 Shizuku 并填写 SIP 配置；首次权限向导会检查电话信息，完成后启用网关");
  }
  void refresh()throws Exception{
-  String root=Root.run("printf 'dialer='; cmd role get-role-holders --user 0 android.app.role.DIALER; printf 'shizuku='; if pidof shizuku_server >/dev/null; then echo running; else echo stopped; fi; printf 'boot='; if [ -f "+Root.BASE+"/autostart ]; then echo on; else echo off; fi; printf 'compat='; if [ -f "+Root.BASE+"/mtk-compat-enabled ]; then echo on; else echo off; fi",15);
+  String dialer=getSystemService(android.telecom.TelecomManager.class).getDefaultDialerPackage();
+  String root="dialer="+(dialer==null?"未设置":dialer)+"\n"+Root.run("printf 'shizuku='; if pidof shizuku_server >/dev/null; then echo running; else echo stopped; fi; printf 'boot='; if [ -f "+Root.BASE+"/autostart ]; then echo on; else echo off; fi; printf 'compat='; if [ -f "+Root.BASE+"/mtk-compat-enabled ]; then echo on; else echo off; fi",15);
   String status=Releases.installed(this,Root.AGENT)==null?"未安装":Root.control("status");
   // Store only fixed status fields; do not persist raw upstream reports or call details.
   String safe="";
