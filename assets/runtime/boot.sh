@@ -19,12 +19,12 @@ fi
 # Keep waiting for credential-protected devices, including unlocks after 15 minutes.
 while :; do
  [ -f "$BASE/autostart" ] || [ -f "$BASE/health-enabled" ] || exit 0
- [ "$(getprop sys.boot_completed)" = 1 ] && [ "$(cmd activity get-started-user-state 0 2>/dev/null | tr -d '\r')" = RUNNING_UNLOCKED ] && break
- sleep 5
+ [ "$(getprop sys.boot_completed)" = 1 ] && [ "$("$BB" timeout 10 cmd activity get-started-user-state 0 2>/dev/null | tr -d '\r')" = RUNNING_UNLOCKED ] && break
+ sleep 1
 done
 echo app_storage_ready
 if [ -f "$BASE/autostart" ] && [ -z "$(pidof shizuku_server)" ]; then
- APK=$(pm path moe.shizuku.privileged.api 2>/dev/null | sed -n 's/^package://p' | head -n 1)
+ APK=$("$BB" timeout 10 pm path moe.shizuku.privileged.api 2>/dev/null | sed -n 's/^package://p' | head -n 1)
  EXPECTED=$(cat "$BASE/health-shizuku.sha256" 2>/dev/null)
  if [ -n "$APK" ] && [ -f "$APK" ] && [ -x "$BASE/shizuku_starter" ] && [ -n "$EXPECTED" ] && [ "$("$BB" sha256sum "$APK" | "$BB" awk '{print $1}')" = "$EXPECTED" ]; then
   "$BB" timeout 45 "$BASE/shizuku_starter" --apk="$APK" </dev/null >/dev/null 2>&1 || echo shizuku_start_deferred

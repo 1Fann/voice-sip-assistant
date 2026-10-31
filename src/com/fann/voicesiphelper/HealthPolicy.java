@@ -16,6 +16,8 @@ final class HealthPolicy {
   return false;
  }
  static boolean healthy(String status){return status.contains("ready=true")&&status.contains("shizuku=CONNECTED")&&status.contains("audioReady=true")&&status.contains("sip=ready");}
+ static boolean bindingAllowed(String status){return status.contains("takeover=on")&&!status.contains(" pending")&&!status.contains("PERMISSION_REQUIRED")&&!status.contains("PERMISSION_DENIED")&&status.contains("calls=No cellular call")&&!status.contains("SHIZUKU_NOT_RUNNING")&&!status.contains("shizuku=STOPPED");}
+ static boolean fastMtk(String status,boolean previouslyEnabled){return previouslyEnabled&&bindingAllowed(status)&&status.contains("shizuku=BINDING");}
  static boolean idle(String registry,String pbx,boolean serverExpected){
   Matcher m=Pattern.compile("(?m)^\\s*mCallState=([0-9]+)\\s*$").matcher(registry);
   boolean found=false;while(m.find()){found=true;if(!m.group(1).equals("0"))return false;}

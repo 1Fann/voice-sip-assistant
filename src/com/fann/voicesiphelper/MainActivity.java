@@ -52,7 +52,7 @@ getWindow().setStatusBarColor(Color.rgb(242,247,246));getWindow().setNavigationB
   backgroundStatus=text("正在检查后台运行与自启动权限…",14,muted);bg.addView(backgroundStatus);
   button(bg,"检查 / 允许后台运行",false,()->background(true));
   background(false);
-  LinearLayout monitor=card("网关自动检查与恢复","每 10 秒检查后台服务是否退出；按下方间隔完整检查 Shizuku、网关音频就绪和 SIP 注册，异常时自动恢复；服务器由 Asterisk 助手独立检查与恢复。清理助手后台仍有效，开机应用数据可用后自动恢复检查；无锁屏密码时通常无需手动解锁，有密码时持续等待首次解锁。通话时跳过修复，保留静音，尊重手动停用；严重权限异常时可能打开网关页面。深度休眠可能延后检查。");
+  LinearLayout monitor=card("网关自动检查与恢复","每约 1 秒检查已知网关进程是否退出，每 10 秒检查前台服务；按下方间隔完整检查 Shizuku、网关音频就绪和 SIP 注册，异常时自动恢复。空闲时保留已授权权限服务，缩短网关意外退出后的重新连接；实际恢复仍需通过当前权限、音频和 SIP 检查。服务器由 Asterisk 助手独立恢复。开机应用数据可用后自动恢复检查；有锁屏密码时等待首次解锁。通话时跳过修复，保留静音，尊重手动停用；严重权限异常时可能打开网关页面。深度休眠可能延后检查。");
   health=new Switch(this);health.setText("开启自动检查与恢复");health.setTextSize(16);add(monitor,health,12);
   health.setOnCheckedChangeListener((b,on)->{if(updating)return;updating=true;health.setChecked(!on);updating=false;saveHealth(on);});
   add(monitor,text("检查间隔（分钟，1–1440）",14,ink),12);
@@ -77,7 +77,7 @@ getWindow().setStatusBarColor(Color.rgb(242,247,246));getWindow().setNavigationB
   button(advanced,"停用网关并恢复系统默认电话",false,()->confirm("恢复系统默认电话","将先停用手机通话网关，等待通话结束后撤销网关的电话访问登记，并在需要时恢复原默认电话应用。之后 SIP 客户端将无法通过手机 SIM 接打电话，重新启用网关后恢复。",()->start("RESTORE")));
   LinearLayout startup=card("开机准备","此独立选项只准备 Shizuku，不会启用已手动停用的手机通话网关。上方自动恢复开启时，会另行在开机应用数据可用后恢复检查并准备所需服务；不要求滑开无密码的锁屏页面。");
   boot=new Switch(this);boot.setText("开机准备 Shizuku");boot.setTextSize(15);add(startup,boot,12);boot.setOnCheckedChangeListener((b,on)->{if(updating)return;updating=true;boot.setChecked(!on);updating=false;start(on?"BOOT_ON":"BOOT_OFF");});
-  LinearLayout about=card("来源与说明","Voice SIP 助手 1.4.1 是独立管理工具，与上游作者无隶属关系。一键部署获取本项目生产签名的整合网关；基于上游的修改版，支持默认卡及按次选卡。自动检查与恢复使用 Root 独立运行，恢复清理造成的异常；需要时可能重启 Shizuku，其他使用它的应用可能短暂断开。不修改 SIP 密码或通话音频设置。卸载助手前请关闭自动检查与恢复。");
+  LinearLayout about=card("来源与说明","Voice SIP 助手 1.4.6 是独立管理工具，与上游作者无隶属关系。一键部署获取本项目生产签名的整合网关；基于上游的修改版，支持默认卡及按次选卡。自动检查与恢复使用 Root 独立运行，恢复清理造成的异常；需要时可能重启 Shizuku，其他使用它的应用可能短暂断开。不修改 SIP 密码或通话音频设置。卸载助手前请关闭自动检查与恢复。");
   Button source=button(about,"查看上游项目与使用说明",false,()->startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://github.com/sparkcyf/android-voice-sip-agent"))));operations.remove(source);
   if(Build.VERSION.SDK_INT>=33&&checkSelfPermission("android.permission.POST_NOTIFICATIONS")!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"},1);
  }
