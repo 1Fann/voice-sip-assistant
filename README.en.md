@@ -1,17 +1,19 @@
 # Voice SIP Assistant
 
-**Version: 1.4.6** — [新手机部署与权限说明 / New-phone setup](NEW-PHONE-SETUP.md)
+**Version: 1.4.7** — [新手机部署与权限说明 / New-phone setup](NEW-PHONE-SETUP.md)
 
 One-click deployment now selects the fixed integrated gateway. Signature-protected Shizuku recovery, actionable phone-permission diagnostics, root-provider discovery and automatic runtime refresh.
 
 [中文](README.md) · [Download APK](https://github.com/1Fann/voice-sip-assistant/releases/latest) · [MIT](LICENSE)
 
-Version **1.4.6**. An original Root deployment/management app for Voice SIP Agent and Shizuku; not an upstream official app or a SIP server.
+Version **1.4.7**. An original Root deployment/management app for Voice SIP Agent and Shizuku; not an upstream official app or a SIP server.
 
 It downloads the production-signed integrated gateway and official Shizuku APKs with source/hash/certificate checks, prepares official Shizuku in Root mode, controls the phone gateway and SIP reconnection, offers system-dialer restoration under advanced repair, and provides a Root bootstrap for the tested MediaTek ROM's Shizuku UserService failure. User consent and service caller checks remain. It recognizes the separately signed [custom gateway](https://github.com/1Fann/voice-sip-gateway) and does not overwrite it with an official upgrade.
 
 
-## Update 1.4.6
+## Update 1.4.7
+
+Adds controlled recovery after repeated gateway status timeouts, plus official-signature verification and starter handoff after Shizuku updates. Recovery still checks current call state, authorization and process identity, respects manual stop, and does not restart when call idleness is unknown. See the [1.4.7 release notes](https://github.com/1Fann/voice-sip-assistant/releases/tag/v1.4.7) for changes, device observations and validation limits.
 
 Known gateway process liveness is observed about once per second. Recovery retains current call-state, signature, authorization and manual-stop guards. Direct PID and Wi-Fi observations reduce startup work, with support for idle privileged-service reuse and daemon requests retained across a cold-boot client replacement. Pair with gateway custom.5. Detection cadence is not a fixed service-recovery guarantee; readiness still requires current permission, audio, SIP and server checks.
 
@@ -67,6 +69,6 @@ Cached PID probes remain once per second, following the user's preference. Full 
 Accepts either standard Shizuku service-lifetime mode from the signed gateway. A pending daemon request may predate the current gateway client, but must belong to the current Shizuku server. Non-daemon requests additionally require the current gateway generation. Latest-request, both process identities, APK/version, permission, call-state and manual-stop checks remain enforced. Monitoring stays at one second; this helper update does not itself change the gateway lifetime setting.
 A restricted early start is also included: only an observed old gateway PID loss, matching selected package and successful live authorization/signature/call preflight can start the foreground service ahead of the full PBX/SIP/background checks. Those checks still run and final readiness is unchanged. A successful start request is not reported as recovered telephone service.
 
-## 1.4.6 warm-recovery observations (2026-10-31)
+## 1.4.7 warm-recovery observations (2026-10-31)
 
 The root checker now queries process liveness and current `wlan0` IPv4 addresses directly instead of spawning repeated command processes. Only ESRCH plus verified `/proc` absence can enter the existing fast-start guard; access errors, PID reuse, active/unknown calls, revoked authorization and manual stop still reject it. Both signature/authorization checks and the corrected cold-boot daemon-token rules remain intact. The monitor still checks known process liveness about once per second and foreground ownership every ten seconds. Recovery readiness still requires current audio and SIP checks, not cached readiness or a fixed-time claim.

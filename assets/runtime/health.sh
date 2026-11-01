@@ -89,12 +89,16 @@ if [ "$1" = --check ]; then
  [ "$("$BB" timeout 10 cmd activity get-started-user-state 0 2>/dev/null 3>&- 4>&- 5>&- 6>&- 7>&- 8>&- 9>&- | tr -d '\r')" = RUNNING_UNLOCKED ] || exit 0
  HELPER=$("$BB" timeout 10 pm path com.fann.voicesiphelper 2>/dev/null 3>&- 4>&- 5>&- 6>&- 7>&- 8>&- 9>&- | sed -n 's/^package://p' | head -n 1)
  SHIZUKU=$("$BB" timeout 10 pm path moe.shizuku.privileged.api 2>/dev/null 3>&- 4>&- 5>&- 6>&- 7>&- 8>&- 9>&- | sed -n 's/^package://p' | head -n 1)
- [ -n "$HELPER" ] && [ -f "$HELPER" ] && [ -n "$SHIZUKU" ] && [ -f "$SHIZUKU" ] || exit 0
+ [ -n "$HELPER" ] && [ -f "$HELPER" ] || exit 0
  # Validate protected hashes BEFORE loading APK code as root, including after reinstall/update.
  EXPECTED=$(cat "$BASE/health-helper.sha256" 2>/dev/null)
  [ -n "$EXPECTED" ] && [ "$("$BB" sha256sum "$HELPER" | "$BB" awk '{print $1}')" = "$EXPECTED" ] || exit 0
  EXPECTED=$(cat "$BASE/health-shizuku.sha256" 2>/dev/null)
- [ -n "$EXPECTED" ] && [ "$("$BB" sha256sum "$SHIZUKU" | "$BB" awk '{print $1}')" = "$EXPECTED" ] || exit 0
+ if [ -z "$SHIZUKU" ] || [ ! -f "$SHIZUKU" ] || [ -z "$EXPECTED" ] || [ "$("$BB" sha256sum "$SHIZUKU" | "$BB" awk '{print $1}')" != "$EXPECTED" ]; then
+  # Never load a changed dependency into root's classpath. The already pinned
+  # helper alone verifies the package signature and performs an idle-only handoff.
+  exec env CLASSPATH="$HELPER" app_process /system/bin --nice-name=voice_dependency_check com.fann.voicesiphelper.DependencyUpdateMain </dev/null >/dev/null 2>&1
+ fi
  # The check itself retains both locks through exec; only disposable query
  # children close them. The outer entry already supplies the total deadline.
  exec env CLASSPATH="$HELPER:$SHIZUKU" app_process /system/bin --nice-name=voice_sip_health_check com.fann.voicesiphelper.HealthMain "${2:-}" "${3:-}" </dev/null >/dev/null 2>&1

@@ -28,7 +28,7 @@ public final class HealthMain {
    if(!Releases.signedBy(Releases.installed(context,context.getPackageName()),Root.DUALSIM_CERT))throw new IOException("助手签名校验失败");
    if(!new File(base,"health-enabled").isFile())return;
    phase="check";check();
-  }catch(Exception e){retrySoon=enabled()&&!"paused_or_busy".equals(e.getMessage());error=e.getClass().getSimpleName();if(e.getStackTrace().length>0){StackTraceElement f=e.getStackTrace()[0];error+=":"+f.getMethodName()+":"+f.getLineNumber();}message="检查或恢复未完成，请查看权限与网络后重试";}
+  }catch(Exception e){retrySoon=enabled()&&!"paused_or_busy".equals(e.getMessage());error=e.getClass().getSimpleName();if(e.getStackTrace().length>0){StackTraceElement f=e.getStackTrace()[0];error+=":"+f.getMethodName()+":"+f.getLineNumber();}message=e instanceof Root.StatusTimeout?(repaired?"已对持续无响应的网关执行受控恢复，下轮确认就绪":"网关状态请求超时，正在观察；仅在连续超时且确认空闲后恢复"):"检查或恢复未完成，请查看权限与网络后重试";}
   finally{save();if(retrySoon)System.exit(75);}
  }
  static boolean enabled(){return new File(base,"health-enabled").isFile();}
@@ -60,7 +60,53 @@ public final class HealthMain {
   return HealthPolicy.idle(Root.run("dumpsys telephony.registry",12),channels,server);
  }
  static void guard()throws Exception{if(!enabled()||!idle())throw new IOException("paused_or_busy");}
- static String status()throws Exception{return Root.control("status");}
+ static String status()throws Exception{
+  try{String value=Root.control("status");GatewayWatchdog state=readWatchdog();state.clear();writeWatchdog(state);return value;}
+  catch(Root.StatusTimeout timeout){recoverUnresponsiveGateway();throw timeout;}
+  catch(Exception other){GatewayWatchdog state=readWatchdog();state.clear();writeWatchdog(state);throw other;}
+ }
+ static String readSmall(File file)throws IOException{
+  if(!file.isFile()||file.length()>4096)return "";
+  try(BufferedReader in=new BufferedReader(new FileReader(file))){String line=in.readLine();return line==null?"":line;}
+ }
+ static String bootId()throws IOException{return readSmall(new File("/proc/sys/kernel/random/boot_id"));}
+ static GatewayWatchdog readWatchdog()throws Exception{
+  GatewayWatchdog state=new GatewayWatchdog();String boot=bootId();
+  try{JSONObject j=new JSONObject(readSmall(new File(base,"gateway-watchdog.json")));
+   if(!boot.isEmpty()&&boot.equals(j.optString("boot"))){state.identity=j.optString("identity");state.first=j.optLong("first");state.last=j.optLong("last");state.failures=j.optInt("failures");state.nextAllowed=j.optLong("nextAllowed");}
+  }catch(Exception ignored){}return state;
+ }
+ static void writeWatchdog(GatewayWatchdog state)throws Exception{
+  JSONObject j=new JSONObject();j.put("boot",bootId());j.put("identity",state.identity);j.put("first",state.first);j.put("last",state.last);j.put("failures",state.failures);j.put("nextAllowed",state.nextAllowed);
+  File tmp=new File(base,"gateway-watchdog.tmp");try(FileOutputStream out=new FileOutputStream(tmp)){out.write(j.toString().getBytes(StandardCharsets.UTF_8));out.getFD().sync();}
+  if(!tmp.renameTo(new File(base,"gateway-watchdog.json")))throw new IOException("watchdog_state_not_saved");
+ }
+ static void recoverUnresponsiveGateway()throws Exception{
+  String ids=Root.run("pidof "+Root.AGENT+" || true",5);
+  if(!ids.matches("[1-9][0-9]*"))return;
+  final int pid=Integer.parseInt(ids);final String pkg=Root.AGENT;
+  final long ticks=MtkRequestToken.processTicks(pid,pkg);
+  final GatewayWatchdog state=readWatchdog();long now=android.os.SystemClock.elapsedRealtime();
+  boolean due=state.timeout(pkg+":"+pid+":"+ticks,now);writeWatchdog(state);
+  phase="gateway_unresponsive";
+  if(!due)return;
+  boolean restored=state.attempt(now,new GatewayWatchdog.Host(){
+   public boolean authorized()throws Exception{return enabled()&&new File(base,"background-authorized").isFile()&&pkg.equals(Root.AGENT)&&Boolean.TRUE.equals(takeover())&&pbxEnabled()&&wifi();}
+   public boolean sameProcess(){try{MtkRequestToken.sameProcess(pid,pkg,ticks);return true;}catch(Exception e){return false;}}
+   public boolean trusted()throws Exception{return Root.trustedAgent(context)&&Releases.signedBy(Releases.installed(context,Root.SHIZUKU),Releases.SHIZUKU_CERT);}
+   public boolean idle()throws Exception{return HealthMain.idle();}
+   public void persist()throws Exception{writeWatchdog(state);}
+   public void restart()throws Exception{
+    MtkRequestToken.sameProcess(pid,pkg,ticks);android.system.Os.kill(pid,android.system.OsConstants.SIGTERM);
+    long deadline=android.os.SystemClock.elapsedRealtime()+3000;
+    while(sameProcess()&&android.os.SystemClock.elapsedRealtime()<deadline)Thread.sleep(100);
+    if(sameProcess())throw new IOException("gateway_exit_pending");
+    if(!authorized()||!trusted()||!idle())return;
+    startGateway();repaired=true;
+   }
+  });
+  if(restored)phase="gateway_runtime_restarted";
+ }
  static void check()throws Exception {
   Root.selectAgent(context);
   // Share only the selected package name with the cheap root PID probe, never credentials.

@@ -40,6 +40,7 @@ final class Root {
   return result;
  }
  static String quote(String value){return "'"+value.replace("'","'\\''")+"'";}
+ static final class StatusTimeout extends IOException {StatusTimeout(){super("gateway_status_timeout");}}
  static String control(String operation)throws Exception{
   String args;
   switch(operation){
@@ -52,6 +53,7 @@ final class Root {
    default:throw new IOException("无效控制操作");
   }
   String value=run("am broadcast --receiver-foreground -n "+AGENT+"/io.github.sparkcyf.voicesipagent.app.AdbControlReceiver "+args,20);
+  if(operation.equals("status")&&value.contains("result=3")&&value.contains("timeout: op 'status'"))throw new StatusTimeout();
   if(!value.contains("result=1"))throw new IOException("网关尚未确认操作，请打开网关页面查看运行状态 后重试");
   return value;
  }

@@ -171,3 +171,33 @@ After correcting the cold-start pending-request lifetime check, a further gatewa
 
 数值为本机含探测开销的首次观测，不是普适上限。守护与业务分别连续抽样确认至少 1 秒和 3 秒。电话就绪检查含网关状态及匹配的 PBX 注册记录；本次未拨打真实电话、发送短信或通知，也未验证外网送达或双向通话音频。
 <!-- recovery-target-20261031:end -->
+
+
+## 2026-11-01 reliability follow-up 1.4.7
+
+
+增加网关内部线程无响应的受控恢复。只有网关自身连续返回状态请求超时，同一进程身份至少持续异常 30 秒且累计至少三次，才考虑恢复。操作前重复核验授权、网关签名、进程启动标识和蜂窝／PBX 通话空闲状态；恢复尝试间隔至少五分钟，手动停用和未知通话状态继续阻止恢复。
+
+Shizuku 更新后，如果原 APK 指纹变化，守护只加载已固定校验的助手代码，单独验证官方签名及安装包稳定性。满足现有授权与空闲条件后，原子交接启动组件和指纹，下一轮继续常规检查。缺失、签名不符、正在通话或暂停授权时显示具体诊断；不会把未经核验的新依赖加入 Root 类路径。
+
+本地测试覆盖连续无响应、进程替换、冷却、状态保存失败、签名不符、更新竞争和通话／停用保护。部署后的进程退出与整机重启实测见下；内部线程卡死恢复和实际通话音频仍需单独实机验收。
+
+Adds bounded recovery for an unresponsive gateway runtime. Recovery requires at least three explicit status-timeout acknowledgements spanning 30 seconds from the same process identity. Consent, signing identity, process start ticks and independent cellular/PBX idle checks are repeated before signalling that process. Attempts are separated by a five-minute cooldown; manual stop and unknown call state remain authoritative.
+
+When Shizuku's APK fingerprint changes, only the already pinned helper is loaded as root. It independently verifies the official signature and stable package contents, then atomically hands off the starter and fingerprint while authorized and idle. The next check resumes the ordinary dependency path. Missing or untrusted packages, active calls and paused authorization produce explicit diagnostics. A changed dependency is never loaded before verification.
+
+Local regressions cover stalls, process replacement, cooldown, persistence failure, signature rejection, update races and call/stop guards. Post-deployment process-exit and reboot observations follow below; recovery from an internal thread stall and real-call audio still require separate device acceptance.
+
+### 2026-11-01 最终 APK 业务退出及整机重启验收 / Business-process and reboot acceptance
+
+最终 1.4.7 APK 的 SHA-256 为 `ddbc0c9c762969f5fa8bcb4cba938ec0593d336769aebb32a8b8d376e177c604`。部署后，单次受控终止电话网关业务进程，首次观测完整本地就绪为 **2.59 秒**，随后连续稳定确认至少 3 秒。同轮 PBX 业务进程退出测试为 2.97 秒，并单独通过至少 3 秒稳定确认。电话网关就绪检查要求进程存在、前台服务运行、状态请求获得应答，以及 `ready=true`、`takeover=on`、`sip=ready`、`shizuku=CONNECTED`、`audioReady=true`；同时核对 PBX 及匹配的网关注册记录。进程退出试验不等同于内部线程卡死试验。
+
+随后进行一次整机重启，所有时间均从发出重启请求起算，包含系统启动：系统启动完成 **37.53 秒**，用户自动解锁 **37.84 秒**，PBX 网关注册 **54.66 秒**，电话网关完整本地就绪 **62.00 秒**，全套服务首次齐备 **62.06 秒**，在 **66.08 秒**完成持续 4.02 秒的稳定确认。观察者没有输入解锁指令，也没有主动启动 Activity 或服务；该红米设备 `deviceSecure=false`，因此这不是设置安全锁屏密码后首次解锁之前的恢复验证。
+
+以上为单台设备各一次故障／重启实测，时间是包含查询延迟的首次成功观测，不是固定上限或通用保证。仅核验本地接口及状态；`audioReady=true` 不证明实际呼叫接通或双向通话音频，也未验证公网可达。重启记录：调查工作区 `reliability-20261031/private/full-retest-20261101-084900/reboot.json`。
+
+The final 1.4.7 APK has SHA-256 `ddbc0c9c762969f5fa8bcb4cba938ec0593d336769aebb32a8b8d376e177c604`. After deployment, one controlled gateway business-process kill first reached full local readiness in **2.59 seconds**, followed by at least three seconds of stable observation. The separate PBX business-process trial reached readiness in 2.97 seconds and likewise passed at least three seconds of stability observation. Gateway readiness requires a live process, foreground service, acknowledged status request, and `ready=true`, `takeover=on`, `sip=ready`, `shizuku=CONNECTED` and `audioReady=true`, alongside a running PBX and matching gateway registration. A process-exit trial does not test an internal thread stall.
+
+One subsequent whole-device reboot measured every stage from the reboot request, including operating-system startup: boot completed at **37.53 seconds**, the user unlocked automatically at **37.84 seconds**, the PBX gateway registered at **54.66 seconds**, full local gateway readiness appeared at **62.00 seconds**, and all services were first ready at **62.06 seconds**. Stability was confirmed at **66.08 seconds**, after 4.02 seconds of continuous readiness. The observer issued no unlock, Activity-start or service-start commands. The Redmi device reported `deviceSecure=false`; this does not validate recovery before the first credential unlock on a securely locked device.
+
+These are one trial per fault/reboot on one device. Times are first successful observations including query latency, not fixed upper bounds or general guarantees. Checks cover local interfaces and state: `audioReady=true` does not prove a completed real call or two-way call audio, and public-network reachability was not tested. Reboot evidence is in the investigation workspace at `reliability-20261031/private/full-retest-20261101-084900/reboot.json`.

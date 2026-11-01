@@ -21,6 +21,9 @@ jobs:
           mkdir -p .work/policy
           javac -d .work/policy src/com/fann/voicesiphelper/HealthPolicy.java tests/HealthPolicyChecks.java
           java -cp .work/policy com.fann.voicesiphelper.HealthPolicyChecks
+          javac -d .work/policy src/com/fann/voicesiphelper/GatewayWatchdog.java src/com/fann/voicesiphelper/DependencyHandoff.java tests/GatewayWatchdogChecks.java tests/DependencyHandoffChecks.java
+          java -cp .work/policy com.fann.voicesiphelper.GatewayWatchdogChecks
+          java -cp .work/policy com.fann.voicesiphelper.DependencyHandoffChecks
           python3 tools/audit_public.py
           python3 tools/verify_release.py
 
