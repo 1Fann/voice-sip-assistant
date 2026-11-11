@@ -53,11 +53,20 @@ try {
     if($LASTEXITCODE){throw 'DEX packaging failed'}
     & (Join-Path $javaBin 'jar.exe') -uf (Join-Path $output 'unsigned.apk') -C $PSScriptRoot assets
     if($LASTEXITCODE){throw 'Runtime asset packaging failed'}
+    $clang=Join-Path $sdk 'ndk\27.0.12077973\toolchains\llvm\prebuilt\windows-x86_64\bin\aarch64-linux-android31-clang.cmd'
+    if(!(Test-Path -LiteralPath $clang)){throw 'Install Android NDK 27.0.12077973 to build the process monitor.'}
+    $native=Join-Path $output 'native-runtime'
+    $nativeAssets=Join-Path $native 'assets\runtime'
+    New-Item -ItemType Directory -Force -Path $nativeAssets | Out-Null
+    & $clang -Wall -Wextra -Werror -Os -fPIE -pie '-Wl,--strip-all' (Join-Path $PSScriptRoot 'native\process_wait.c') -o (Join-Path $nativeAssets 'process-wait')
+    if($LASTEXITCODE){throw 'Process monitor compilation failed'}
+    & (Join-Path $javaBin 'jar.exe') -uf (Join-Path $output 'unsigned.apk') -C $native assets/runtime/process-wait
+    if($LASTEXITCODE){throw 'Process monitor packaging failed'}
     & (Join-Path $buildTools 'zipalign.exe') -f 4 (Join-Path $output 'unsigned.apk') (Join-Path $output 'aligned.apk')
     if($LASTEXITCODE){throw 'APK alignment failed'}
-    & (Join-Path $buildTools 'apksigner.bat') sign --ks $key --ks-key-alias voice-sip-assistant --ks-pass env:VSA_HELPER_SIGNING_PASSWORD --key-pass env:VSA_HELPER_SIGNING_PASSWORD --out (Join-Path $output 'Voice-SIP-Assistant-1.4.7.apk') (Join-Path $output 'aligned.apk')
+    & (Join-Path $buildTools 'apksigner.bat') sign --ks $key --ks-key-alias voice-sip-assistant --ks-pass env:VSA_HELPER_SIGNING_PASSWORD --key-pass env:VSA_HELPER_SIGNING_PASSWORD --out (Join-Path $output 'Voice-SIP-Assistant-1.4.8.apk') (Join-Path $output 'aligned.apk')
     if($LASTEXITCODE){throw 'APK signing failed'}
-    & (Join-Path $buildTools 'apksigner.bat') verify (Join-Path $output 'Voice-SIP-Assistant-1.4.7.apk')
+    & (Join-Path $buildTools 'apksigner.bat') verify (Join-Path $output 'Voice-SIP-Assistant-1.4.8.apk')
     if($LASTEXITCODE){throw 'APK verification failed'}
-    & (Join-Path $buildTools 'aapt2.exe') dump permissions (Join-Path $output 'Voice-SIP-Assistant-1.4.7.apk')
+    & (Join-Path $buildTools 'aapt2.exe') dump permissions (Join-Path $output 'Voice-SIP-Assistant-1.4.8.apk')
 }finally{Remove-Item Env:VSA_HELPER_SIGNING_PASSWORD -ErrorAction SilentlyContinue}

@@ -19,10 +19,25 @@ final class HealthPolicy {
  static boolean bindingAllowed(String status){return status.contains("takeover=on")&&!status.contains(" pending")&&!status.contains("PERMISSION_REQUIRED")&&!status.contains("PERMISSION_DENIED")&&status.contains("calls=No cellular call")&&!status.contains("SHIZUKU_NOT_RUNNING")&&!status.contains("shizuku=STOPPED");}
  static boolean fastMtk(String status,boolean previouslyEnabled){return previouslyEnabled&&bindingAllowed(status)&&status.contains("shizuku=BINDING");}
  static boolean idle(String registry,String pbx,boolean serverExpected){
+  return cellularState(registry,pbx,serverExpected)==0;
+ }
+ static boolean ringingOnly(String registry,String pbx,boolean serverExpected){
+  return cellularState(registry,pbx,serverExpected)==1;
+ }
+ private static int cellularState(String registry,String pbx,boolean serverExpected){
   Matcher m=Pattern.compile("(?m)^\\s*mCallState=([0-9]+)\\s*$").matcher(registry);
-  boolean found=false;while(m.find()){found=true;if(!m.group(1).equals("0"))return false;}
-  if(!found)return false;
-  if(serverExpected){Matcher c=Pattern.compile("(?m)^([0-9]+) active calls\\s*$").matcher(pbx);return c.find()&&c.group(1).equals("0");}
-  return true;
+  boolean found=false;
+  int ringing=0;
+  while(m.find()){
+   found=true;
+   if(m.group(1).equals("1"))ringing++;
+   else if(!m.group(1).equals("0"))return -1;
+  }
+  if(!found||ringing>1)return -1;
+  if(serverExpected){
+   Matcher c=Pattern.compile("(?m)^([0-9]+) active calls\\s*$").matcher(pbx);
+   if(!c.find()||!c.group(1).equals("0"))return -1;
+  }
+  return ringing;
  }
 }

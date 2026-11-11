@@ -21,6 +21,15 @@ public class HealthPolicyChecks {
   require(!HealthPolicy.idle(idle,"1 active calls\n",true));
   require(!HealthPolicy.idle(idle,"",true));
   require(HealthPolicy.idle(idle,"",false));
+  String ringing="mCallState=0\nmCallState=1\n";
+  require(HealthPolicy.ringingOnly(ringing,"0 active calls\n",true));
+  require(HealthPolicy.ringingOnly(ringing,"",false));
+  require(!HealthPolicy.ringingOnly(ringing,"1 active calls\n",true));
+  require(!HealthPolicy.ringingOnly(ringing,"",true));
+  require(!HealthPolicy.ringingOnly(ringing+"mCallState=2\n","",false));
+  require(!HealthPolicy.ringingOnly(ringing+"mCallState=1\n","",false));
+  require(!HealthPolicy.ringingOnly(idle,"",false));
+  require(!HealthPolicy.ringingOnly("","",false));
   require(!HealthPolicy.healthy("ready=false shizuku=CONNECTED audioReady=true sip=ready"));
   require(!HealthPolicy.healthy("ready=true shizuku=BINDING audioReady=false sip=down"));
   require(HealthPolicy.healthy("ready=true shizuku=CONNECTED audioReady=true sip=ready"));

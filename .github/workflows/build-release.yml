@@ -41,7 +41,7 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - name: Install Android SDK components
         shell: pwsh
-        run: sdkmanager 'platforms;android-35' 'build-tools;36.0.0'
+        run: sdkmanager 'platforms;android-35' 'build-tools;36.0.0' 'ndk;27.0.12077973'
       - name: Build with a disposable CI signing key
         shell: pwsh
         run: ./build.ps1 -SdkRoot $env:ANDROID_HOME -JavaHome $env:JAVA_HOME -DevelopmentSigning

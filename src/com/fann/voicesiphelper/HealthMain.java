@@ -50,14 +50,16 @@ public final class HealthMain {
   }return null;
  }
  static boolean pbxEnabled(){return new File(PBX,"installed").isFile()&&!new File(PBX,"disabled").exists();}
- static boolean idle()throws Exception {
+ static boolean idle()throws Exception {return callState(false);}
+ static boolean callState(boolean ringing)throws Exception {
   boolean server=pbxEnabled();String channels="";
   if(server){
    String state=Root.run(PBX+"/control.sh state",10);
    if(state.equals("running"))channels=Root.run(PBX+"/control.sh cli core show channels count",10);
    else channels="0 active calls\n";
   }
-  return HealthPolicy.idle(Root.run("dumpsys telephony.registry",12),channels,server);
+  String registry=Root.run("dumpsys telephony.registry",12);
+  return ringing?HealthPolicy.ringingOnly(registry,channels,server):HealthPolicy.idle(registry,channels,server);
  }
  static void guard()throws Exception{if(!enabled()||!idle())throw new IOException("paused_or_busy");}
  static String status()throws Exception{
@@ -112,7 +114,10 @@ public final class HealthMain {
   // Share only the selected package name with the cheap root PID probe, never credentials.
   rememberAgent();
   fastStarted=tryFastStart();
-  if(!idle()){message="正在通话或无法确认通话状态，本轮跳过恢复";return;}
+  if(!idle()){
+   if(!resumeWhileRinging())message="电话线路忙或状态未知，本轮跳过重启";
+   return;
+  }
   if(!wifi()){retrySoon=true;message="等待 Wi-Fi，本轮不重启服务";return;}
   boolean wantedPbx=pbxEnabled();
   // Read-only dependency check. Asterisk Assistant alone owns server recovery.
@@ -179,6 +184,20 @@ public final class HealthMain {
   boolean contact=!wantedPbx||gatewayRegistered();
   retrySoon=!(foreground()&&HealthPolicy.healthy(s)&&contact);
   message=!retrySoon?"已恢复权限、音频与 SIP 连接":"恢复尚未完成，将在下轮重试";
+ }
+ /** A ringing call permits starting a missing service, never restarting a live one. */
+ static boolean resumeWhileRinging()throws Exception{
+  if(!callState(true)||!enabled()||!Boolean.TRUE.equals(takeover())||foreground())return false;
+  if(!Root.trustedAgent(context)||!Releases.signedBy(Releases.installed(context,Root.SHIZUKU),Releases.SHIZUKU_CERT))return false;
+  if(!BackgroundAccess.repairAuthorized(context))return false;
+  if(!callState(true)||!enabled()||!Boolean.TRUE.equals(takeover())||foreground())return false;
+  // Existing Shizuku stays up. Starting it if absent does not tear down a call.
+  Root.startShizuku(context);
+  if(!callState(true)||!enabled()||!Boolean.TRUE.equals(takeover())||foreground())return false;
+  phase="resume_ringing";
+  startGateway();repaired=true;
+  message="来电仍在响铃，已启动网关；就绪后尝试接管";
+  return true;
  }
  static boolean permissionMissing(String status){return status.contains("PERMISSION_REQUIRED")||status.contains("PERMISSION_DENIED");}
  static boolean tryFastStart(){try{

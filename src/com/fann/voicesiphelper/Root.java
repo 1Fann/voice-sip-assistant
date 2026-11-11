@@ -68,7 +68,7 @@ final class Root {
   for(String name:c.getAssets().list("runtime"))try(InputStream in=c.getAssets().open("runtime/"+name);OutputStream out=new FileOutputStream(new File(dir,name))){byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);}
   // Publish each runtime file by rename: truncating a script currently being read
   // can terminate its monitor half-way through a refresh or Shizuku preparation.
-  run("set -eu; umask 077; if [ -e "+BASE+" ] && [ ! -f "+BASE+"/.owned ]; then exit 21; fi; mkdir -p "+BASE+"; chmod 700 "+BASE+"; touch "+BASE+"/.owned; for name in boot.sh health.sh; do cp "+quote(dir.getAbsolutePath())+"/$name "+BASE+"/$name.new.$$; chmod 700 "+BASE+"/$name.new.$$; mv -f "+BASE+"/$name.new.$$ "+BASE+"/$name; done",15);
+  run("set -eu; umask 077; if [ -e "+BASE+" ] && [ ! -f "+BASE+"/.owned ]; then exit 21; fi; mkdir -p "+BASE+"; chmod 700 "+BASE+"; touch "+BASE+"/.owned; for name in process-wait boot.sh health.sh; do cp "+quote(dir.getAbsolutePath())+"/$name "+BASE+"/$name.new.$$; chmod 700 "+BASE+"/$name.new.$$; mv -f "+BASE+"/$name.new.$$ "+BASE+"/$name; done",15);
   run("set -eu; umask 077; printf '%s\\n' "+quote(helperHash)+" > "+BASE+"/health-helper.sha256; printf '%s\\n' "+quote(shizukuHash)+" > "+BASE+"/health-shizuku.sha256",10);
   String currentMonitor=run("sha256sum "+BASE+"/health.sh | cut -d ' ' -f 1",8);
   if(!installedMonitor.equals(currentMonitor)){

@@ -113,6 +113,7 @@ OWNER_PACKAGE=
 OWNER_PID=
 BUSY_RETRIES=0
 EMPTY_RECHECKED=0
+USE_PROCESS_WAIT=1
 clear_recovery() { RECOVERY_PACKAGE=; RECOVERY_PID=; BUSY_RETRIES=0; }
 observe_owner() {
  # Remember a positively observed live PID across the blocking full check. An
@@ -163,8 +164,21 @@ while [ -f "$BASE/health-enabled" ]; do
  TICKS=0
  while [ "$LEFT" -gt 0 ] && [ -f "$BASE/health-enabled" ]; do
   [ -f "$BASE/health-now" ] && { rm -f "$BASE/health-now"; break; }
-  sleep 1 3>&- 4>&- 5>&- 6>&- 7>&- 8>&- 9>&-
-  LEFT=$((LEFT - 1)); TICKS=$((TICKS + 1))
+  STEP=1
+  if [ "$USE_PROCESS_WAIT" -eq 1 ] && [ -n "$OWNER_PID" ] && [ -x "$BASE/process-wait" ]; then
+   STEP=$((10 - TICKS % 10)); [ "$STEP" -le "$LEFT" ] || STEP=$LEFT
+   "$BASE/process-wait" "$BASE" "$OWNER_PID" "${SHIZUKU_PID:-0}" "$STEP" 3>&- 4>&- 5>&- 6>&- 7>&- 8>&- 9>&-
+   case $? in
+    0) ;;
+    10) RECOVERY_PACKAGE=$OWNER_PACKAGE; RECOVERY_PID=$OWNER_PID; OWNER_PID=; BUSY_RETRIES=0; break;;
+    11) break;;
+    12) [ -f "$BASE/health-now" ] && rm -f "$BASE/health-now"; break;;
+    *) USE_PROCESS_WAIT=0; STEP=1; sleep 1 3>&- 4>&- 5>&- 6>&- 7>&- 8>&- 9>&-;;
+   esac
+  else
+   sleep 1 3>&- 4>&- 5>&- 6>&- 7>&- 8>&- 9>&-
+  fi
+  LEFT=$((LEFT - STEP)); TICKS=$((TICKS + STEP))
   # kill -0 is a shell builtin; no Binder/dumpsys work on the one-second path.
   case "$OWNER_PID" in ''|*[!0-9]*) ;; *) if ! kill -0 "$OWNER_PID" 2>/dev/null; then RECOVERY_PACKAGE=$OWNER_PACKAGE; RECOVERY_PID=$OWNER_PID; OWNER_PID=; BUSY_RETRIES=0; break; fi;; esac
   case "$SHIZUKU_PID" in ''|*[!0-9]*) ;; *) kill -0 "$SHIZUKU_PID" 2>/dev/null || break;; esac
